@@ -10,6 +10,7 @@ def connect_to_db(app):
     app.config['SQLALCHEMY_DATABASE_URI'] = db_connection
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
     
+    
     return app
 
 

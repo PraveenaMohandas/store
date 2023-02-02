@@ -9,5 +9,6 @@ def create_app():
     app = connect_to_db(app)
     app = register_blueprint(app)
     middleware(app)
-    SECRET_KEY = os.environ.get('SECRET_KEY')    
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+       
     return app
