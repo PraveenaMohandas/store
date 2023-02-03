@@ -4,59 +4,41 @@ from common.responses import response
 
 @store.route("/", methods=['POST'])
 def insert_polygon_data():
-    # insert data into the table
     from common.model import Delivery
     from app import db 
     from sqlalchemy import func
   
-    # insert
     # db.session.execute(Delivery.insert().values(outletid=id,location=func.ST_GeomFromText('POLYGON((28.4684730 77.1078357,28.4744336 77.1106681,28.4711893 77.1096382,28.4684730 77.1078357))', 4326)))
     insert_polygon_data = Delivery(outletid="2",location=func.ST_GeomFromText('POLYGON([(28.5894880754974 77.04467967572955,28.599448399178602 77.03008845868854,28.602738992882216 77.02536777082233,28.5894880754974 77.04467967572955))', 4326))
 
     db.session.add(insert_polygon_data)
     db.session.commit()
 
-    # query the data from the table
     result = db.session.query(Delivery).all()
     for row in result:
         print(row)
     return "Polygon data inserted and retrieved successfully!"
 
+# Query against polygon field
+def find_nearest_store(lat, lng):
+    from app import db 
+    from common.model import Delivery
+    from sqlalchemy import func
+    query = db.session.query(Delivery.outletid, func.ST_Distance(Delivery.location, func.ST_GeomFromText(f'POINT({lng} {lat})', 4326).label('distance')))
+    query = query.order_by(func.ST_Distance(Delivery.location, func.ST_GeomFromText(f'POINT({lng} {lat})', 4326)))
+    result = query.first()
+    print(result)
+    return result
 
 @store.route('/nearest_store', methods=['GET'])
 def nearest_store():
-    from app import db 
-    from common.model import Delivery
-    from shapely.geometry import Point,Polygon
-    from sqlalchemy import func
-
+   
     lat = request.json['Latitude']
     lng = request.json['Longitude']
-
-    stores = db.session.query(Delivery.outletid,func.ST_AsText(Delivery.location)).all()
-    print(stores)
-    nearest_store = None
-    min_distance = float('inf')
-    point = Point(float(lng), float(lat))
     
-    for store in stores:
-        outletid, location = store
-        print(location)
-        
-        from shapely.wkt import loads
-        polygon= loads(location)
-        print(polygon.contains(point))
-        if polygon.contains(point):
-            nearest_store = outletid
-            break
-        else:
-            distance = point.distance(polygon.centroid)
-            if distance < min_distance:
-                nearest_store = outletid
-                min_distance = distance
+    store = find_nearest_store(lat,lng)
+    return str(store.outletid)
     
-    return (str(nearest_store))
-
 @store.route('csvdata', methods = ['POST','GET'])
 def csvdata():
     import csv
@@ -72,5 +54,36 @@ def csvdata():
                 db.session.commit()
         return "Done !!"
 
+# Query against Point field
+@store.route("/insertpointdata", methods=['POST'])
+def insert_point_data():
+    from app import db
+    from common.model import Outlet
+    outletid = request.json['outletid']
+    name = request.json['name']
+    city = request.json['city']
+    lat = request.json['Latitude']
+    lon = request.json['Longitude']
 
+    new_store = Outlet(id=outletid,name=name,city=city,location=db.text("ST_MakePoint(:lon, :lat)").bindparams(lon=lon, lat=lat))
+    db.session.add(new_store)
+    db.session.commit()
+    return "Point data inserted Succesfully!"
+
+@store.route('/nearby_store', methods=['GET'])
+def nearby_store():
+    from app import db
+    from common.model import Outlet
+    from sqlalchemy import text
+    lat = request.json['Latitude']
+    long = request.json['Longitude']
+    result =db.session.query(Outlet, text("""
+    ST_DistanceSphere(location, ST_SetSRID(ST_Point(:long, :lat), 4326)) AS distance
+    """))\
+    .order_by(text("""
+        location <-> ST_SetSRID(ST_Point(:long, :lat), 4326)
+    """))\
+    .params(long=long, lat=lat)\
+    .first()
+    return str(result)
 
